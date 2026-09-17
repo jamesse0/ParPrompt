@@ -169,7 +169,7 @@ sequenceDiagram
     alt No profiles row yet
         FE->>U: Show username prompt
         U->>FE: Submit username
-        FE->>SB: Insert profiles row {id, username}
+        FE->>SB: Insert profiles row (id, username)
     end
     FE->>U: Redirect to Problem List
 ```
@@ -179,36 +179,35 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor U as User
-    participant FE as Frontend (Workspace)
+    participant FE as Frontend
     participant BE as Backend
-    participant AI as OpenAI API
+    participant AI as OpenAI
     participant DB as Supabase
 
-    U->>FE: Open problem, first chat message (starts timer)
+    U->>FE: Open problem, send first chat message
     loop Prompting
-        FE->>BE: POST /chat {problem_id, message_history}
+        FE->>BE: POST /chat
         BE->>AI: Chat completion request
-        AI-->>BE: reply + code + token usage
-        BE-->>FE: {reply, code, input_tokens, output_tokens}
-        FE->>FE: Accumulate tokens client-side, update live counter
+        AI-->>BE: reply, code, token usage
+        BE-->>FE: reply, code, tokens
+        Note over FE: Update live token counter
         U->>FE: Edit code (optional)
     end
     U->>FE: Click Submit
-    FE->>BE: POST /submit {problem_id, code, tokens, elapsed_seconds}
-    BE->>BE: Run code in Docker sandbox (see below)
-    BE->>DB: Insert attempts row (always)
-    alt All tests pass AND no prior submissions row
-        BE->>DB: Insert submissions row
-    end
-    BE-->>FE: {passed, test_results, attempt_id}
+    FE->>BE: POST /submit
+    BE->>BE: Run code in Docker sandbox
+    BE->>DB: Insert attempts row
+    Note over BE,DB: Also insert a submissions row,<br/>if this is the first pass
+    BE-->>FE: passed, test_results
     alt Failed
-        FE->>U: Show failing test cases inline; user keeps chatting/editing
+        FE->>U: Show failing test cases inline
+        Note over U,FE: User keeps chatting and editing, then resubmits
     else Passed
-        FE->>BE: POST /review {problem_id, code}
+        FE->>BE: POST /review
         BE->>AI: Review completion request
         AI-->>BE: Review comments
         BE-->>FE: Review comments
-        FE->>U: Show results view: final totals + AI review
+        FE->>U: Show results view: totals + AI review
     end
 ```
 
@@ -216,15 +215,17 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant BE as Backend (/submit)
+    participant BE as Backend
     participant FS as Temp file
     participant D as Docker container
 
-    BE->>FS: Write runner harness + submitted code + test_cases
-    BE->>D: docker run --rm --network none --memory 256m --cpus 0.5 (with timeout)
-    D->>D: Loop over test_cases, call function, compare actual vs expected
-    D-->>BE: JSON result line (per-test pass/fail + overall passed)
-    BE->>BE: Parse JSON into test_results + passed bool
+    Note over BE: POST /submit
+    BE->>FS: Write runner harness, submitted code, test cases
+    BE->>D: docker run --rm --network none --memory 256m --cpus 0.5
+    Note over D: Wall-clock timeout enforced
+    D->>D: Loop over test cases, call function, compare actual vs expected
+    D-->>BE: JSON result line (per-test pass/fail, overall passed)
+    BE->>BE: Parse JSON into test results and passed flag
 ```
 
 ## Frontend structure
